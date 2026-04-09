@@ -21,7 +21,7 @@ function initMap() {
     document.getElementById("reset-btn").addEventListener("click", resetMap);
     document.getElementById("current-location-btn").addEventListener("click", getCurrentLocation);
     document.getElementById("open-google-maps-btn").addEventListener("click", openGoogleMaps);
-    
+
     initBottomSheet();
 }
 
@@ -37,26 +37,26 @@ function getCurrentLocation() {
                     lat: position.coords.latitude,
                     lng: position.coords.longitude,
                 };
-                
+
                 // 元のマーカーやルートをクリア
                 resetMap();
-                
+
                 // マップの表示を現在地に移動してズーム
                 map.setCenter(pos);
                 map.setZoom(15);
-                
+
                 // 現在地をスタート地点（1点目）として追加
                 const googlePos = new google.maps.LatLng(pos.lat, pos.lng);
                 addMarker(googlePos);
-                
+
                 btn.innerText = "📍 現在地からスタート";
                 btn.disabled = false;
             },
             (error) => {
                 console.error("Geolocation error:", error);
-                
+
                 let errorMsg = "現在地の取得に失敗しました。";
-                switch(error.code) {
+                switch (error.code) {
                     case error.PERMISSION_DENIED:
                         errorMsg = "位置情報の取得が拒否されました。ブラウザの設定等で許可してください。";
                         break;
@@ -68,7 +68,7 @@ function getCurrentLocation() {
                         break;
                 }
                 alert(errorMsg);
-                
+
                 btn.innerText = "📍 現在地からスタート";
                 btn.disabled = false;
             },
@@ -104,7 +104,7 @@ function addMarker(latLng) {
         color = "#3b82f6"; // Blue for waypoints
         label = String(markerIndex);
     }
-    
+
     const svgMarker = {
         path: google.maps.SymbolPath.CIRCLE,
         fillColor: color,
@@ -136,10 +136,10 @@ function updateGoalMarker() {
     // マーカーが2つ以上ある場合、最後の1つをゴールとして赤色に変更する
     for (let i = 1; i < markers.length; i++) {
         let isGoal = (i === markers.length - 1);
-        
+
         let color = isGoal ? "#ef4444" : "#3b82f6"; // Red for Goal, Blue for Waypoints
         let label = isGoal ? "G" : String(i);
-        
+
         markers[i].setOptions({
             icon: {
                 path: google.maps.SymbolPath.CIRCLE,
@@ -149,11 +149,11 @@ function updateGoalMarker() {
                 strokeColor: "white",
                 scale: 12,
             },
-            label: { 
-                text: label, 
-                color: "white", 
-                fontSize: "12px", 
-                fontWeight: "bold" 
+            label: {
+                text: label,
+                color: "white",
+                fontSize: "12px",
+                fontWeight: "bold"
             }
         });
     }
@@ -164,7 +164,7 @@ function updateStatus() {
     if (markers.length === 0) {
         statusEl.innerText = "マップ上でスタート地点をクリックしてください。";
     } else if (markers.length === 1) {
-        statusEl.innerText = "ゴール（または経由地）をクリックしてください。";
+        statusEl.innerText = "ゴール（または経由地）をクリックするか、このまま生成できます。";
     } else {
         statusEl.innerText = `現在 ${markers.length} 点設定済み。`;
     }
@@ -182,19 +182,24 @@ function resetMap() {
 }
 
 async function generateRoute() {
-    if (markers.length < 2) {
-        alert("少なくともスタートとゴールの2地点を設定してください。");
+    if (markers.length < 1) {
+        alert("少なくともスタート地点を設定してください。");
         return;
     }
 
     const distanceInput = document.getElementById("distance").value;
     const btn = document.getElementById("generate-btn");
-    
+
     // バックエンドへ送信するデータを構築
     const points = markers.map(m => ({
         lat: m.getPosition().lat(),
         lng: m.getPosition().lng()
     }));
+
+    if (points.length === 1) {
+        // スタートとゴールを同じにする（周回コース）
+        points.push({ lat: points[0].lat, lng: points[0].lng });
+    }
 
     const elevationInput = document.getElementById("elevation");
     const payload = {
@@ -216,7 +221,7 @@ async function generateRoute() {
         });
 
         const data = await response.json();
-        
+
         if (data.error) {
             alert("エラー: " + data.error);
         } else if (data.polyline) {
@@ -224,12 +229,12 @@ async function generateRoute() {
             // 距離と状態の更新
             let distText = (data.total_distance / 1000).toFixed(2);
             document.getElementById("status").innerText = `ルート生成完了! 推定距離: ${distText} km`;
-            
+
             lastGeneratedPoints = data.points || [];
             if (lastGeneratedPoints.length >= 2) {
                 document.getElementById("open-google-maps-btn").style.display = "block";
             }
-            
+
             if (data.note) {
                 console.log(data.note); // デバッグ用: 迂回アルゴリズム適用のログ
             }
@@ -260,7 +265,7 @@ function drawRoute(encodedString) {
     });
 
     routePolyline.setMap(map);
-    
+
     // ルート全体が画面に収まるようマップのズームと中心を調整
     const bounds = new google.maps.LatLngBounds();
     path.forEach(p => bounds.extend(p));
@@ -272,7 +277,7 @@ function openGoogleMaps() {
 
     const origin = `${lastGeneratedPoints[0].lat},${lastGeneratedPoints[0].lng}`;
     const destination = `${lastGeneratedPoints[lastGeneratedPoints.length - 1].lat},${lastGeneratedPoints[lastGeneratedPoints.length - 1].lng}`;
-    
+
     // 経由地（スタートとゴール以外）を連結
     let waypointsParam = "";
     if (lastGeneratedPoints.length > 2) {
@@ -313,11 +318,11 @@ function initBottomSheet() {
         if (!isDragging) return;
         const deltaY = e.clientY - startY;
         currentTranslateY = startTranslateY + deltaY;
-        
+
         const max = getMaxTranslateY();
         if (currentTranslateY < 0) currentTranslateY = 0;
         if (currentTranslateY > max) currentTranslateY = max;
-        
+
         panel.style.transform = `translateY(${currentTranslateY}px)`;
     });
 
@@ -326,16 +331,16 @@ function initBottomSheet() {
         isDragging = false;
         panel.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
         handle.releasePointerCapture(e.pointerId);
-        
+
         const max = getMaxTranslateY();
         const deltaY = e.clientY - startY;
-        
+
         if (Math.abs(deltaY) < 5) {
             isCollapsed = !isCollapsed; // Click toggles
         } else {
             isCollapsed = currentTranslateY > max / 2;
         }
-        
+
         if (isCollapsed) {
             panel.classList.add('collapsed');
             panel.style.transform = `translateY(${getMaxTranslateY()}px)`;

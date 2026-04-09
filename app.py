@@ -65,6 +65,70 @@ def get_elevation_gain(polyline_str):
             gain += diff
     return gain
 
+def generate_loop_waypoints(start, end, D, L):
+    """
+    同じ道を2度通らないように、迂回または周回するための経由地を生成する。
+    """
+    waypoints = []
+    
+    # 希望距離が小さすぎる場合の補正
+    if L < D * 1.1:
+        L = D * 1.1
+    if L < 0.5:
+        L = 0.5
+        
+    # スタートとゴールが同じ、または非常に近い場合（完全な周回コース）
+    if D < 0.1:
+        # 円周Lの円形のルートを生成 (半径 R_km = L / 2π)
+        R_km = L / (2 * math.pi)
+        R_deg = R_km / 111.0 # 約111kmで1度
+        
+        # スタート地点からランダムな方向(center_angle)に円の中心を取る
+        center_angle = random.uniform(0, 2 * math.pi)
+        lat_rad = math.radians(start['lat'])
+        center_lat = start['lat'] + R_deg * math.sin(center_angle)
+        center_lng = start['lng'] + (R_deg * math.cos(center_angle)) / math.cos(lat_rad)
+        
+        # 中心から見て、スタート地点とは反対側の3ヶ所（90度、180度、270度）を経由地とする
+        start_angle_rel = center_angle + math.pi
+        
+        for i in [1, 2, 3]:
+            w_angle = start_angle_rel + (i * math.pi / 2.0)
+            fuzz_R = random.uniform(0.8, 1.2) * R_deg # 少しだけ形を崩してランダム性を出す
+            w_lat = center_lat + fuzz_R * math.sin(w_angle)
+            w_lng = center_lng + (fuzz_R * math.cos(w_angle)) / math.cos(lat_rad)
+            waypoints.append({'lat': w_lat, 'lng': w_lng})
+            
+    else:
+        # スタートとゴールが離れている場合（大きな迂回ループ）
+        # 膨らみを計算 (H = sqrt(L^2 - D^2) / 2)
+        H_km = math.sqrt(max(0, L**2 - D**2)) / 2.0
+        H_deg = H_km / 111.0
+        
+        mid_lat = (start['lat'] + end['lat']) / 2.0
+        # ２点間の方向ベクトルと垂直ベクトル
+        dlat = end['lat'] - start['lat']
+        dlng = end['lng'] - start['lng']
+        length = math.hypot(-dlng, dlat) or 1
+        
+        perp_lat = -dlng / length
+        perp_lng = dlat / length
+        
+        side = random.choice([-1, 1])
+        lat_rad = math.radians(mid_lat)
+        
+        # 行って戻って同じ道にならないように、2つの経由地を配置して四角形のような軌道を作る
+        for i in [1, 2]:
+            base_lat = start['lat'] + dlat * (i / 3.0)
+            base_lng = start['lng'] + dlng * (i / 3.0)
+            
+            fuzz_H = random.uniform(0.7, 1.3) * H_deg # 高さにも少し揺らぎ
+            w_lat = base_lat + perp_lat * fuzz_H * side
+            w_lng = base_lng + (perp_lng * fuzz_H * side) / math.cos(lat_rad)
+            waypoints.append({'lat': w_lat, 'lng': w_lng})
+            
+    return waypoints
+
 @app.route('/api/generate_route', methods=['POST'])
 def generate_route():
     data = request.json
@@ -85,39 +149,12 @@ def generate_route():
     for attempt in range(3):
         modified_points = list(points)
         
-        # 希望距離(L)と直線距離(D)から、楕円の短軸の高さを求める基準オフセットを計算
-        if desired_distance > D:
-            # 万が一Dが0に近い時のゼロ割りを防ぐ
-            base_L = desired_distance if desired_distance > 0.1 else 0.1
-            base_D = D if D > 0 else 0.01
-            # sqrtの中身がマイナスにならないように
-            val = (base_L / 2.0)**2 - (base_D / 2.0)**2
-            h_km = math.sqrt(val) if val > 0 else 0.1
-            offset_deg = h_km / 111.0 
-        else:
-            # 距離が足りている場合でもランダムな揺らぎ（1〜2kmのブレ）を加える
-            offset_deg = random.uniform(0.005, 0.02)
-            
-        # 完全なランダム性を追加：オフセット量にブレ(0.6倍〜1.5倍)と、左右どちら側かのランダム反転を付与
-        side_multiplier = random.choice([-1, 1])
-        fuzz = random.uniform(0.6, 1.5)
-        final_offset_deg = offset_deg * fuzz * side_multiplier
+        # 希望距離(L)に応じて、同じ道を通らないように迂回経由地を生成
+        extra_waypoints = generate_loop_waypoints(start, end, D, desired_distance)
         
-        # 垂直ベクトルを求めて中間地点にオフセット適用
-        mid_lat = (start['lat'] + end['lat']) / 2.0
-        mid_lng = (start['lng'] + end['lng']) / 2.0
-        
-        dlat = end['lat'] - start['lat']
-        dlng = end['lng'] - start['lng']
-        length = math.hypot(-dlng, dlat) or 1
-        perp_lat = -dlng / length
-        perp_lng = dlat / length
-        
-        auto_waypoint = {
-            'lat': mid_lat + perp_lat * final_offset_deg,
-            'lng': mid_lng + perp_lng * final_offset_deg
-        }
-        modified_points.insert(-1, auto_waypoint)
+        # 生成した経由地をエンドポイントの直前に挿入
+        for wp in extra_waypoints:
+            modified_points.insert(-1, wp)
         
         res = get_directions_from_google(modified_points)
         if res and res.get('status') == 'OK' and res.get('routes'):
