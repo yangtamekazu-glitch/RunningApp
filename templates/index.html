@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Running Route Auto Generator</title>
+    <!-- 共通のスタイルとフォント -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <!-- 地図表示領域 -->
+    <div id="map"></div>
+    
+    <!-- UIコントロールパネル -->
+    <div id="ui-panel">
+        <div id="panel-handle">
+            <div class="handle-bar"></div>
+        </div>
+        <div id="panel-content">
+            <h1>Route Generator</h1>
+        <p class="description">
+            マップ上をクリックして地点を設定してください。<br>
+            (1点目: スタート, 2〜6点目: 経由地, 最後: ゴール)
+        </p>
+        <div class="input-group">
+            <label for="distance">希望距離 (km)</label>
+            <input type="number" id="distance" step="0.1" min="1" value="5.0">
+        </div>
+        <div class="input-group">
+            <label for="elevation">高低差</label>
+            <select id="elevation" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 1rem; outline: none; background: white;">
+                <option value="any">気にしない</option>
+                <option value="flat">なるべく平坦</option>
+                <option value="hilly">坂多め</option>
+            </select>
+        </div>
+        <button id="current-location-btn" class="secondary" style="margin-bottom: 12px;">📍 現在地からスタート</button>
+        <button id="generate-btn">ルートを生成する</button>
+        <button id="open-google-maps-btn" class="secondary" style="display:none; margin-bottom: 12px;">🗺️ Googleマップで開く</button>
+        <button id="reset-btn" class="secondary">クリア</button>
+        <div id="status">マップ上でスタート地点をクリックしてください。</div>
+        </div>
+    </div>
+    
+    <!-- Google Maps API (バックエンドから環境変数経由で埋め込み) -->
+    <!-- 注意：ポリラインを描画するために geometry ライブラリを読み込んでいます -->
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&libraries=geometry&callback=initMap" async defer></script>
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>
