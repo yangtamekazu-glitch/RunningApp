@@ -3,6 +3,9 @@ let markers = [];
 let routePolyline = null;
 let lastGeneratedPoints = [];
 let addingWaypointMode = false;
+let pendingWaypoints = [];
+let pendingWaypointMarkers = [];
+
 
 function initMap() {
     // デフォルトの中心位置（東京駅周辺）
@@ -13,10 +16,55 @@ function initMap() {
         zoomControl: true,
     });
 
+    // URLパラメータから連携された経由地を取得
+    const urlParams = new URLSearchParams(window.location.search);
+    const wLat = parseFloat(urlParams.get('waypoint_lat'));
+    const wLng = parseFloat(urlParams.get('waypoint_lng'));
+    if (!isNaN(wLat) && !isNaN(wLng)) {
+        const latLng = new google.maps.LatLng(wLat, wLng);
+        pendingWaypoints.push(latLng);
+        
+        // 待機中の経由地として半透明などの仮ピンを表示する
+        const tmpMarker = new google.maps.Marker({
+            position: latLng,
+            map: map,
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                fillColor: "#94a3b8", // 待機中を示すグレーアウト色
+                fillOpacity: 1,
+                strokeWeight: 2,
+                strokeColor: "white",
+                scale: 12,
+            },
+            label: {
+                text: "予約",
+                color: "white",
+                fontSize: "10px",
+                fontWeight: "bold"
+            }
+        });
+        pendingWaypointMarkers.push(tmpMarker);
+
+        map.setCenter({ lat: wLat, lng: wLng });
+        map.setZoom(15);
+    }
+
     // マップ上のクリックで地点を追加
     map.addListener("click", (e) => {
         if (markers.length < 2) {
             addMarker(e.latLng, markers.length === 0 ? 'start' : 'goal');
+            
+            // ゴール地点が追加された直後（markers.length === 2）、予約経由地があれば展開
+            if (markers.length === 2 && pendingWaypoints.length > 0) {
+                // 仮ピンをマップから消す
+                pendingWaypointMarkers.forEach(m => m.setMap(null));
+                pendingWaypointMarkers = [];
+
+                pendingWaypoints.forEach(latLng => {
+                    addMarker(latLng, 'waypoint');
+                });
+                pendingWaypoints = []; // クリア
+            }
         } else if (addingWaypointMode) {
             addMarker(e.latLng, 'waypoint');
             addingWaypointMode = false;
@@ -172,10 +220,12 @@ function updateStatus() {
     const wpBtn = document.getElementById("add-waypoint-btn");
 
     if (markers.length === 0) {
-        statusEl.innerText = "マップ上でスタート地点をクリックしてください。";
+        let extraMsg = pendingWaypoints.length > 0 ? ` (+連携経由地 ${pendingWaypoints.length}件待機中)` : "";
+        statusEl.innerText = "マップ上でスタート地点をクリックしてください。" + extraMsg;
         if (wpBtn) wpBtn.style.display = "none";
     } else if (markers.length === 1) {
-        statusEl.innerText = "次にゴール地点をクリックしてください。";
+        let extraMsg = pendingWaypoints.length > 0 ? ` (+連携経由地 ${pendingWaypoints.length}件待機中)` : "";
+        statusEl.innerText = "次にゴール地点をクリックしてください。" + extraMsg;
         if (wpBtn) wpBtn.style.display = "none";
     } else {
         if (addingWaypointMode) {
@@ -202,6 +252,9 @@ function resetMap() {
     }
     lastGeneratedPoints = [];
     addingWaypointMode = false;
+    pendingWaypoints = [];
+    pendingWaypointMarkers.forEach(m => m.setMap(null));
+    pendingWaypointMarkers = [];
     document.getElementById("open-google-maps-btn").style.display = "none";
     const wpBtn = document.getElementById("add-waypoint-btn");
     if (wpBtn) wpBtn.style.display = "none";
