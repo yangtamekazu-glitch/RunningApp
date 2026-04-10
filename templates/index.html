@@ -37,6 +37,16 @@
                 <option value="hilly">坂多め</option>
             </select>
         </div>
+        <div id="saved-locations-section" style="margin-bottom: 12px;">
+            <label style="display:block; margin-bottom: 8px; font-weight: 600; color: var(--text-color);">★ お気に入り（ブックマーク）登録地点</label>
+            <div id="saved-locations-list" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <!-- JSで動的に追加されます -->
+            </div>
+            <button id="save-current-btn" class="secondary" style="margin-top: 8px; font-size: 0.85rem; padding: 6px 12px; background: rgba(0,0,0,0.05);">
+                + マップ中央の地点を保存する
+            </button>
+        </div>
+
         <button id="current-location-btn" class="secondary" style="margin-bottom: 12px;">📍 現在地からスタート</button>
         <button id="add-waypoint-btn" class="secondary" style="display:none; margin-bottom: 12px;">📍 経由地を追加</button>
         <button id="generate-btn">ルートを生成する</button>

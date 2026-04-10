@@ -5,6 +5,13 @@ let lastGeneratedPoints = [];
 let addingWaypointMode = false;
 let pendingWaypoints = [];
 let pendingWaypointMarkers = [];
+let savedLocations = [];
+
+// ローカルストレージからブックマークを読み込み
+try {
+    const data = localStorage.getItem('runningApp_bookmarks');
+    if (data) savedLocations = JSON.parse(data);
+} catch (e) { console.error(e); }
 
 
 function initMap() {
@@ -76,15 +83,36 @@ function initMap() {
     document.getElementById("reset-btn").addEventListener("click", resetMap);
     document.getElementById("current-location-btn").addEventListener("click", getCurrentLocation);
     document.getElementById("open-google-maps-btn").addEventListener("click", openGoogleMaps);
+    renderBookmarks();
 
-    document.getElementById("add-waypoint-btn").addEventListener("click", () => {
-        if (markers.length >= 7) {
-            alert("設定できる経由地は最大5ヶ所までです。");
-            return;
-        }
-        addingWaypointMode = true;
-        updateStatus();
-    });
+    // 経由地追加モードのトグル
+    const addWaypointBtn = document.getElementById("add-waypoint-btn");
+    if (addWaypointBtn) {
+        addWaypointBtn.addEventListener("click", () => {
+            if (markers.length >= 2) {
+                addingWaypointMode = true;
+                updateStatus();
+            }
+        });
+    }
+
+    // ★ お気に入り（ブックマーク）登録ボタン
+    const saveBtn = document.getElementById("save-current-btn");
+    if (saveBtn) {
+        saveBtn.addEventListener("click", () => {
+            let locName = prompt("この地点の名前を入力してください（例: 自宅、職場）");
+            if (!locName || locName.trim() === "") return;
+            const center = map.getCenter();
+            savedLocations.push({
+                name: locName.substring(0, 10), // Limit length
+                lat: center.lat(),
+                lng: center.lng()
+            });
+            localStorage.setItem('runningApp_bookmarks', JSON.stringify(savedLocations));
+            renderBookmarks();
+            alert(`「${locName}」を保存しました！`);
+        });
+    }
 
     initBottomSheet();
 }
@@ -433,3 +461,51 @@ function initBottomSheet() {
         panel.style.transform = `translateY(${currentTranslateY}px)`;
     });
 }
+
+// お気に入り地点をUIに表示する関数
+function renderBookmarks() {
+    const listEl = document.getElementById("saved-locations-list");
+    if (!listEl) return;
+    listEl.innerHTML = "";
+    
+    if (savedLocations.length === 0) {
+        listEl.innerHTML = `<span style="color:#666; font-size:0.85rem;">まだ登録されていません。</span>`;
+        return;
+    }
+
+    savedLocations.forEach((loc, index) => {
+        const btn = document.createElement("button");
+        btn.className = "secondary";
+        btn.style.padding = "4px 8px";
+        btn.style.fontSize = "0.85rem";
+        btn.style.marginRight = "4px";
+        btn.textContent = `📍 ${loc.name}`;
+        btn.title = "クリックでこの場所をセット";
+        
+        btn.addEventListener("click", () => {
+            const latLng = new google.maps.LatLng(loc.lat, loc.lng);
+            
+            if (markers.length < 2) {
+                addMarker(latLng, markers.length === 0 ? "start" : "goal");
+                
+                if (markers.length === 2 && pendingWaypoints.length > 0) {
+                    pendingWaypointMarkers.forEach(m => m.setMap(null));
+                    pendingWaypointMarkers = [];
+                    pendingWaypoints.forEach(ll => addMarker(ll, "waypoint"));
+                    pendingWaypoints = [];
+                }
+            } else if (addingWaypointMode) {
+                addMarker(latLng, "waypoint");
+                addingWaypointMode = false;
+                updateStatus();
+            } else {
+                alert("すでにスタートとゴールが設定されています。「経由地を追加」を押してから使ってみてください！");
+            }
+            
+            map.setCenter(latLng);
+        });
+
+        listEl.appendChild(btn);
+    });
+}
+
