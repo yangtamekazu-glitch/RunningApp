@@ -2,6 +2,7 @@ let map;
 let markers = [];
 let routePolyline = null;
 let lastGeneratedPoints = [];
+let addingWaypointMode = false;
 
 function initMap() {
     // デフォルトの中心位置（東京駅周辺）
@@ -14,13 +15,28 @@ function initMap() {
 
     // マップ上のクリックで地点を追加
     map.addListener("click", (e) => {
-        addMarker(e.latLng);
+        if (markers.length < 2) {
+            addMarker(e.latLng, markers.length === 0 ? 'start' : 'goal');
+        } else if (addingWaypointMode) {
+            addMarker(e.latLng, 'waypoint');
+            addingWaypointMode = false;
+            updateStatus();
+        }
     });
 
     document.getElementById("generate-btn").addEventListener("click", generateRoute);
     document.getElementById("reset-btn").addEventListener("click", resetMap);
     document.getElementById("current-location-btn").addEventListener("click", getCurrentLocation);
     document.getElementById("open-google-maps-btn").addEventListener("click", openGoogleMaps);
+
+    document.getElementById("add-waypoint-btn").addEventListener("click", () => {
+        if (markers.length >= 7) {
+            alert("設定できる経由地は最大5ヶ所までです。");
+            return;
+        }
+        addingWaypointMode = true;
+        updateStatus();
+    });
 
     initBottomSheet();
 }
@@ -47,7 +63,7 @@ function getCurrentLocation() {
 
                 // 現在地をスタート地点（1点目）として追加
                 const googlePos = new google.maps.LatLng(pos.lat, pos.lng);
-                addMarker(googlePos);
+                addMarker(googlePos, 'start');
 
                 btn.innerText = "📍 現在地からスタート";
                 btn.disabled = false;
@@ -83,31 +99,15 @@ function getCurrentLocation() {
     }
 }
 
-function addMarker(latLng) {
-    // 最大7点（スタート・ゴール＋経由地5点）の制限
+function addMarker(latLng, type) {
     if (markers.length >= 7) {
         alert("設定できる経由地は最大5ヶ所までです。（スタート・ゴールを含めて全7点）");
         return;
     }
 
-    const markerIndex = markers.length;
-    let title = "";
-    let color = "";
-    let label = "";
-
-    if (markerIndex === 0) {
-        title = "Start";
-        color = "#22c55e"; // Green for start
-        label = "S";
-    } else {
-        title = "Point";
-        color = "#3b82f6"; // Blue for waypoints
-        label = String(markerIndex);
-    }
-
     const svgMarker = {
         path: google.maps.SymbolPath.CIRCLE,
-        fillColor: color,
+        fillColor: "#3b82f6",
         fillOpacity: 1,
         strokeWeight: 2,
         strokeColor: "white",
@@ -117,30 +117,38 @@ function addMarker(latLng) {
     const marker = new google.maps.Marker({
         position: latLng,
         map: map,
-        title: title,
         icon: svgMarker,
+        draggable: true, // ピンを個別に配置（ドラッグ）可能にする
         label: {
-            text: label,
+            text: "",
             color: "white",
             fontSize: "12px",
             fontWeight: "bold"
         }
     });
 
-    markers.push(marker);
-    updateGoalMarker();
+    if (type === 'start' || type === 'goal') {
+        markers.push(marker);
+    } else {
+        // スタートとゴールの間に挿入
+        markers.splice(markers.length - 1, 0, marker);
+    }
+
+    updateLabels();
     updateStatus();
 }
 
-function updateGoalMarker() {
-    // マーカーが2つ以上ある場合、最後の1つをゴールとして赤色に変更する
-    for (let i = 1; i < markers.length; i++) {
+function updateLabels() {
+    for (let i = 0; i < markers.length; i++) {
+        let isStart = (i === 0);
         let isGoal = (i === markers.length - 1);
 
-        let color = isGoal ? "#ef4444" : "#3b82f6"; // Red for Goal, Blue for Waypoints
-        let label = isGoal ? "G" : String(i);
+        let color = isStart ? "#22c55e" : (isGoal ? "#ef4444" : "#3b82f6");
+        let label = isStart ? "S" : (isGoal ? "G" : String(i));
+        let title = isStart ? "Start" : (isGoal ? "Goal" : "Point");
 
         markers[i].setOptions({
+            title: title,
             icon: {
                 path: google.maps.SymbolPath.CIRCLE,
                 fillColor: color,
@@ -161,12 +169,28 @@ function updateGoalMarker() {
 
 function updateStatus() {
     const statusEl = document.getElementById("status");
+    const wpBtn = document.getElementById("add-waypoint-btn");
+
     if (markers.length === 0) {
         statusEl.innerText = "マップ上でスタート地点をクリックしてください。";
+        if (wpBtn) wpBtn.style.display = "none";
     } else if (markers.length === 1) {
-        statusEl.innerText = "ゴール（または経由地）をクリックするか、このまま生成できます。";
+        statusEl.innerText = "次にゴール地点をクリックしてください。";
+        if (wpBtn) wpBtn.style.display = "none";
     } else {
-        statusEl.innerText = `現在 ${markers.length} 点設定済み。`;
+        if (addingWaypointMode) {
+            statusEl.innerText = "マップ上をクリックして経由地を配置してください。";
+            if (wpBtn) wpBtn.style.display = "none";
+        } else {
+            statusEl.innerText = `現在 ${markers.length} 点設定済み。`;
+            if (wpBtn) {
+                if (markers.length < 7) {
+                    wpBtn.style.display = "block";
+                } else {
+                    wpBtn.style.display = "none";
+                }
+            }
+        }
     }
 }
 
@@ -177,7 +201,10 @@ function resetMap() {
         routePolyline.setMap(null);
     }
     lastGeneratedPoints = [];
+    addingWaypointMode = false;
     document.getElementById("open-google-maps-btn").style.display = "none";
+    const wpBtn = document.getElementById("add-waypoint-btn");
+    if (wpBtn) wpBtn.style.display = "none";
     updateStatus();
 }
 
@@ -300,7 +327,6 @@ function initBottomSheet() {
     let startY = 0;
     let startTranslateY = 0;
     let currentTranslateY = 0;
-    let isCollapsed = false;
 
     function getMaxTranslateY() {
         return panel.offsetHeight - 30; // Handle height
@@ -309,7 +335,7 @@ function initBottomSheet() {
     handle.addEventListener('pointerdown', (e) => {
         isDragging = true;
         startY = e.clientY;
-        startTranslateY = isCollapsed ? getMaxTranslateY() : 0;
+        startTranslateY = currentTranslateY;
         panel.style.transition = 'none';
         handle.setPointerCapture(e.pointerId);
     });
@@ -332,28 +358,25 @@ function initBottomSheet() {
         panel.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
         handle.releasePointerCapture(e.pointerId);
 
-        const max = getMaxTranslateY();
         const deltaY = e.clientY - startY;
+        const max = getMaxTranslateY();
 
         if (Math.abs(deltaY) < 5) {
-            isCollapsed = !isCollapsed; // Click toggles
-        } else {
-            isCollapsed = currentTranslateY > max / 2;
-        }
-
-        if (isCollapsed) {
-            panel.classList.add('collapsed');
-            panel.style.transform = `translateY(${getMaxTranslateY()}px)`;
-        } else {
-            panel.classList.remove('collapsed');
-            panel.style.transform = `translateY(0px)`;
+            if (currentTranslateY > max / 2) {
+                currentTranslateY = 0;
+            } else {
+                currentTranslateY = max;
+            }
+            panel.style.transform = `translateY(${currentTranslateY}px)`;
         }
     });
 
     window.addEventListener('resize', () => {
-        if (isCollapsed) {
-            panel.style.transition = 'none';
-            panel.style.transform = `translateY(${getMaxTranslateY()}px)`;
+        const max = getMaxTranslateY();
+        if (currentTranslateY > max) {
+            currentTranslateY = max;
         }
+        panel.style.transition = 'none';
+        panel.style.transform = `translateY(${currentTranslateY}px)`;
     });
 }

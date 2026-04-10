@@ -22,8 +22,8 @@
         <div id="panel-content">
             <h1>Route Generator</h1>
         <p class="description">
-            マップ上をクリックして地点を設定してください。<br>
-            (1点目: スタート, 2〜6点目: 経由地, 最後: ゴール)
+            マップ上をタップしてスタート地点とゴール地点を設定してください。<br>
+            設定後、「経由地を追加」ボタンから経由地を配置できます。
         </p>
         <div class="input-group">
             <label for="distance">希望距離 (km)</label>
@@ -38,6 +38,7 @@
             </select>
         </div>
         <button id="current-location-btn" class="secondary" style="margin-bottom: 12px;">📍 現在地からスタート</button>
+        <button id="add-waypoint-btn" class="secondary" style="display:none; margin-bottom: 12px;">📍 経由地を追加</button>
         <button id="generate-btn">ルートを生成する</button>
         <button id="open-google-maps-btn" class="secondary" style="display:none; margin-bottom: 12px;">🗺️ Googleマップで開く</button>
         <button id="reset-btn" class="secondary">クリア</button>
